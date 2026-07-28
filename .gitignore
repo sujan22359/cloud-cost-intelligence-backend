@@ -1,0 +1,44 @@
+# Python Bytecode & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Uploads & Temporary Files
+uploads/
+.pytest_cache/
+.pytest-tmp/
+.coverage
+htmlcov/
+coverage.xml
+
+# AWS SAM & Build Artifacts
+.aws-sam/
+
+# IDE & OS Files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

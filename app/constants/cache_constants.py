@@ -1,0 +1,5 @@
+"""Caching and TTL constants."""
+
+CACHE_TTL_SECONDS = 300
+STALE_TIME_MS = 300_000
+GC_TIME_MS = 600_000

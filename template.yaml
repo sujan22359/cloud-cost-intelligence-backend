@@ -45,7 +45,7 @@ Parameters:
     Description: AWS Bedrock Region
   BedrockModelId:
     Type: String
-    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Default: arn:aws:bedrock:us-east-1:706244676568:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0
     Description: AWS Bedrock Claude Model ID
 
 Resources:

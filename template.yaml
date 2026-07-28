@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS SAM template for Cloud Cost Intelligence FastAPI Backend on AWS Lambda
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        POSTGRES_HOST: !Ref PostgresHost
+        POSTGRES_PORT: !Ref PostgresPort
+        POSTGRES_DB: !Ref PostgresDb
+        POSTGRES_USER: !Ref PostgresUser
+        POSTGRES_PASSWORD: !Ref PostgresPassword
+        BEDROCK_REGION: !Ref BedrockRegion
+        BEDROCK_MODEL_ID: !Ref BedrockModelId
+
+Parameters:
+  PostgresHost:
+    Type: String
+    Description: PostgreSQL / Amazon RDS Endpoint Host
+  PostgresPort:
+    Type: String
+    Default: '5432'
+    Description: PostgreSQL Port
+  PostgresDb:
+    Type: String
+    Default: costdb
+    Description: Database Name
+  PostgresUser:
+    Type: String
+    Default: postgres
+    Description: Database Username
+  PostgresPassword:
+    Type: String
+    NoEcho: true
+    Description: Database Password
+  BedrockRegion:
+    Type: String
+    Default: us-east-1
+    Description: AWS Bedrock Region
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Description: AWS Bedrock Claude Model ID
+
+Resources:
+  FastApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: app.main.handler
+      Description: FastAPI Backend Handler for Cloud Cost Intelligence
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+        ApiProxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - ce:GetCostAndUsage
+                - ce:GetCostForecast
+              Resource: '*'
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway Endpoint URL for FastAPI Backend
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"

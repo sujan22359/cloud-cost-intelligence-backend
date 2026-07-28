@@ -1,0 +1,40 @@
+"""Centralized billing-category configuration for business-facing cost views."""
+
+NON_SERVICE_BILLING_CATEGORIES = {
+    "tax",
+    "credit",
+    "credits",
+    "refund",
+    "refunds",
+    "discount",
+    "discounts",
+    "marketplace",
+    "marketplace charges",
+    "support",
+    "savings",
+    "savings plan negation",
+    "savings plan covered usage",
+    "savings plan recurring fee",
+    "savings plan upfront fee",
+    "savings plan charges",
+    "reserved instance fee",
+    "reserved instance charges",
+    "reserved instances charges",
+    "reserved instance unused amortized upfront fee",
+    "upfront",
+    "adjustment",
+    "adjustments",
+}
+
+NON_SERVICE_BILLING_CATEGORY_FRAGMENTS = (
+    "tax",
+    "credit",
+    "refund",
+    "discount",
+    "marketplace",
+    "support",
+    "savings plan",
+    "reserved instance",
+    "upfront",
+    "adjustment",
+)

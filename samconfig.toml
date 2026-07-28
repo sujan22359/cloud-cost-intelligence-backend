@@ -1,0 +1,10 @@
+# AWS SAM CLI Configuration File
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "cloud-cost-intelligence-backend"
+s3_prefix = "cloud-cost-intelligence-backend"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+disable_rollback = false

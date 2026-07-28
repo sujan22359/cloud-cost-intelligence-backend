@@ -1,84 +1,140 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AWS SAM template for Cloud Cost Intelligence FastAPI Backend on AWS Lambda
+Description: Cloud Cost Intelligence Backend (FastAPI + Lambda + S3 Event-Driven ETL)
 
 Globals:
   Function:
-    Timeout: 30
-    MemorySize: 512
     Runtime: python3.11
+    MemorySize: 1024
+    Timeout: 120
     Architectures:
       - x86_64
+    Tracing: Active
     Environment:
       Variables:
+        # PostgreSQL (Existing Amazon RDS)
         POSTGRES_HOST: !Ref PostgresHost
         POSTGRES_PORT: !Ref PostgresPort
         POSTGRES_DB: !Ref PostgresDb
         POSTGRES_USER: !Ref PostgresUser
         POSTGRES_PASSWORD: !Ref PostgresPassword
+
+        # AWS Region & Bedrock
+        AWS_REGION: !Ref AWS::Region
         BEDROCK_REGION: !Ref BedrockRegion
         BEDROCK_MODEL_ID: !Ref BedrockModelId
+
+        # S3 Bucket
+        S3_BUCKET_NAME: !Ref S3BucketName
+        AWS_S3_BUCKET: !Ref S3BucketName
 
 Parameters:
   PostgresHost:
     Type: String
-    Description: PostgreSQL / Amazon RDS Endpoint Host
+    Description: Existing Amazon RDS PostgreSQL Endpoint Host
+
   PostgresPort:
     Type: String
-    Default: '5432'
+    Default: "5432"
     Description: PostgreSQL Port
+
   PostgresDb:
     Type: String
-    Default: costdb
+    Default: postgres
     Description: Database Name
+
   PostgresUser:
     Type: String
     Default: postgres
     Description: Database Username
+
   PostgresPassword:
     Type: String
     NoEcho: true
     Description: Database Password
+
+  S3BucketName:
+    Type: String
+    Description: Existing Amazon S3 bucket name containing billing CSV reports
+
   BedrockRegion:
     Type: String
     Default: us-east-1
     Description: AWS Bedrock Region
+
   BedrockModelId:
     Type: String
     Default: arn:aws:bedrock:us-east-1:706244676568:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0
-    Description: AWS Bedrock Claude Model ID
+    Description: Amazon Bedrock Claude Model ID
 
 Resources:
+  # ── 1. FastAPI Web Backend Lambda Function ──────────────────────────────────
   FastApiFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: cloud-cost-intelligence-api
       CodeUri: ./
       Handler: app.main.handler
-      Description: FastAPI Backend Handler for Cloud Cost Intelligence
+      Description: FastAPI API Gateway Handler for Cloud Cost Intelligence Assistant
+      Timeout: 120
       Events:
-        ApiRoot:
+        Root:
           Type: Api
           Properties:
             Path: /
             Method: ANY
-        ApiProxy:
+        Proxy:
           Type: Api
           Properties:
             Path: /{proxy+}
             Method: ANY
       Policies:
+        - AWSLambdaBasicExecutionRole
         - Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: '*'
+                - bedrock:InvokeModelWithResponseStream
+              Resource: "*"
+
+  # ── 2. Event-Driven ETL Lambda Function ───────────────────────────────────
+  EtlSyncFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloud-cost-intelligence-etl-sync
+      CodeUri: ./
+      Handler: app.scheduler.sync_lambda.sync_handler
+      Description: S3 Event-Driven ETL Lambda for processing monthly billing CSVs
+      Timeout: 300
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
             - Effect: Allow
               Action:
-                - ce:GetCostAndUsage
-                - ce:GetCostForecast
-              Resource: '*'
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub arn:aws:s3:::${S3BucketName}
+                - !Sub arn:aws:s3:::${S3BucketName}/*
+
+  # ── 3. S3 Permission for Event Notification Trigger ─────────────────────────
+  EtlSyncFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref EtlSyncFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::${S3BucketName}
 
 Outputs:
   ApiEndpoint:
     Description: API Gateway Endpoint URL for FastAPI Backend
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  FastApiFunctionArn:
+    Description: FastAPI Lambda Function ARN
+    Value: !GetAtt FastApiFunction.Arn
+
+  EtlSyncFunctionArn:
+    Description: Event-Driven ETL Lambda Function ARN
+    Value: !GetAtt EtlSyncFunction.Arn

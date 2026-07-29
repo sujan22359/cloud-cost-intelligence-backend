@@ -8,3 +8,9 @@ region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 disable_rollback = false
+resolve_s3 = true
+parameter_overrides = "PostgresHost=\"aws-cost.ccbgym6uizfo.us-east-1.rds.amazonaws.com\" PostgresPort=\"5432\" PostgresDb=\"postgres\" PostgresUser=\"postgres\" S3BucketName=\"awscost359\" BedrockRegion=\"us-east-1\" BedrockModelId=\"arn:aws:bedrock:us-east-1:706244676568:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0\""
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-1"

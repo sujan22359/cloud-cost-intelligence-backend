@@ -64,6 +64,22 @@ class Settings(BaseSettings):
     download_dir: str = Field(default=DEFAULT_DOWNLOAD_DIR, validation_alias=AliasChoices("DOWNLOAD_DIR"))
     log_dir: str = Field(default=DEFAULT_LOG_DIR, validation_alias=AliasChoices("LOG_DIR"))
 
+    # ── Authentication ────────────────────────────────────────────────────────
+    login_email: str = Field(
+        default="infrastructureteam@ssi.safestart.com",
+        validation_alias=AliasChoices("LOGIN_EMAIL", "AUTH_EMAIL"),
+    )
+    login_password: str = Field(
+        default="admin@359",
+        validation_alias=AliasChoices("LOGIN_PASSWORD", "AUTH_PASSWORD"),
+    )
+    jwt_secret_key: str = Field(
+        default="cloud-cost-intelligence-jwt-secret-key-prod-2026-secure",
+        validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"),
+    )
+    jwt_algorithm: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALGORITHM"))
+    jwt_expire_hours: int = Field(default=24, validation_alias=AliasChoices("JWT_EXPIRE_HOURS"))
+
     default_top_k: int = Field(default=DEFAULT_TOP_K, validation_alias=AliasChoices("DEFAULT_TOP_K", "TOP_K_RESULTS"))
     default_pagination_size: int = Field(
         default=DEFAULT_PAGINATION_SIZE, validation_alias=AliasChoices("DEFAULT_PAGINATION_SIZE", "PAGINATION_SIZE")

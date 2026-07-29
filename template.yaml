@@ -19,8 +19,12 @@ Globals:
         POSTGRES_USER: !Ref PostgresUser
         POSTGRES_PASSWORD: !Ref PostgresPassword
 
-        # AWS Region & Bedrock
-        AWS_REGION: !Ref AWS::Region
+        # Authentication
+        LOGIN_EMAIL: !Ref LoginEmail
+        LOGIN_PASSWORD: !Ref LoginPassword
+        JWT_SECRET_KEY: !Ref JwtSecretKey
+
+        # AWS Bedrock (AWS_REGION is automatically injected by AWS Lambda runtime)
         BEDROCK_REGION: !Ref BedrockRegion
         BEDROCK_MODEL_ID: !Ref BedrockModelId
 
@@ -29,8 +33,24 @@ Globals:
         AWS_S3_BUCKET: !Ref S3BucketName
 
 Parameters:
+  LoginEmail:
+    Type: String
+    Default: infrastructureteam@ssi.safestart.com
+    Description: Company login email address
+
+  LoginPassword:
+    Type: String
+    NoEcho: true
+    Description: Company login password
+
+  JwtSecretKey:
+    Type: String
+    NoEcho: true
+    Description: JWT secret key for access token signing
+
   PostgresHost:
     Type: String
+    Default: aws-cost.ccbgym6uizfo.us-east-1.rds.amazonaws.com
     Description: Existing Amazon RDS PostgreSQL Endpoint Host
 
   PostgresPort:
@@ -55,6 +75,7 @@ Parameters:
 
   S3BucketName:
     Type: String
+    Default: awscost359
     Description: Existing Amazon S3 bucket name containing billing CSV reports
 
   BedrockRegion:
@@ -69,6 +90,7 @@ Parameters:
 
 Resources:
   # ── 1. FastAPI Web Backend Lambda Function ──────────────────────────────────
+  # Least Privilege: Only Basic Execution + Bedrock permissions. S3 read is NOT needed.
   FastApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -98,6 +120,7 @@ Resources:
               Resource: "*"
 
   # ── 2. Event-Driven ETL Lambda Function ───────────────────────────────────
+  # Least Privilege: Basic Execution + S3 GetObject & ListBucket for billing CSV imports.
   EtlSyncFunction:
     Type: AWS::Serverless::Function
     Properties:

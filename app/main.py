@@ -4,17 +4,19 @@ from contextlib import asynccontextmanager
 import logging
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from mangum import Mangum
 from sqlalchemy import text
 
+from app.api.auth_routes import router as auth_router
 from app.api.cost_routes import router as cost_router
 from app.api.database_routes import router as database_router
 from app.api.health_routes import router as health_router
 from app.api.knowledge_routes import router as knowledge_router
 from app.api.qa_routes import router as qa_router
 from app.config import get_settings
+from app.core.security import get_current_user
 from app.db import models  # noqa: F401
 from app.db.database import Base, engine
 from app.exceptions import register_exception_handlers
@@ -74,11 +76,16 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)
 
+    # Public Routes
     app.include_router(health_router)
-    app.include_router(cost_router)
-    app.include_router(qa_router)
-    app.include_router(database_router)
-    app.include_router(knowledge_router)
+    app.include_router(auth_router)
+
+    # Protected Business Routes (Require valid JWT Bearer Token)
+    protected_deps = [Depends(get_current_user)]
+    app.include_router(cost_router, dependencies=protected_deps)
+    app.include_router(qa_router, dependencies=protected_deps)
+    app.include_router(database_router, dependencies=protected_deps)
+    app.include_router(knowledge_router, dependencies=protected_deps)
 
     @app.get("/", include_in_schema=False)
     async def root() -> JSONResponse:

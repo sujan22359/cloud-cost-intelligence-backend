@@ -1,5 +1,4 @@
-"""Centralised application configuration loaded from environment variables."""
-
+import os
 from functools import lru_cache
 from typing import Any
 
@@ -44,10 +43,11 @@ from app.constants.db_constants import (
     POSTGRES_PORT_DEFAULT,
     POSTGRES_USER_DEFAULT,
 )
+from app.core.secrets import fetch_secrets_from_secrets_manager
 
 
 class Settings(BaseSettings):
-    """Application settings sourced from .env or environment variables."""
+    """Application settings sourced from AWS Secrets Manager, .env, or environment variables."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -55,6 +55,9 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    # ── AWS Secrets Manager ───────────────────────────────────────────────────
+    secret_name: str = Field(default="", validation_alias=AliasChoices("SECRET_NAME", "AWS_SECRET_NAME"))
 
     # ── App ───────────────────────────────────────────────────────────────────
     app_name: str = Field(default=APP_NAME_DEFAULT, validation_alias=AliasChoices("APP_NAME"))
@@ -236,5 +239,39 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Return a cached singleton of Settings — safe to call anywhere."""
-    return Settings()
+    """Return a cached singleton of Settings — safe to call anywhere.
+
+    If SECRET_NAME is set, fetches secrets from AWS Secrets Manager and
+    overrides matching configuration properties in Settings.
+    """
+    settings_obj = Settings()
+
+    secret_name = os.getenv("SECRET_NAME") or os.getenv("AWS_SECRET_NAME") or settings_obj.secret_name
+    if secret_name:
+        secrets_dict = fetch_secrets_from_secrets_manager()
+        if secrets_dict:
+            mapping = {
+                "POSTGRES_HOST": "postgres_host",
+                "POSTGRES_PORT": "postgres_port",
+                "POSTGRES_DB": "postgres_db",
+                "POSTGRES_USER": "postgres_user",
+                "POSTGRES_PASSWORD": "postgres_password",
+                "LOGIN_EMAIL": "login_email",
+                "LOGIN_PASSWORD": "login_password",
+                "JWT_SECRET_KEY": "jwt_secret_key",
+                "BEDROCK_MODEL_ID": "bedrock_model_id",
+                "S3_BUCKET_NAME": "aws_s3_bucket",
+                "AWS_S3_BUCKET": "aws_s3_bucket",
+            }
+            for secret_key, attr_name in mapping.items():
+                if secret_key in secrets_dict and hasattr(settings_obj, attr_name):
+                    val = secrets_dict[secret_key]
+                    if attr_name == "postgres_port" and isinstance(val, str):
+                        try:
+                            val = int(val)
+                        except ValueError:
+                            pass
+                    setattr(settings_obj, attr_name, val)
+
+    return settings_obj
+

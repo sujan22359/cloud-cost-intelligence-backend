@@ -12,17 +12,8 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        # PostgreSQL (Existing Amazon RDS)
-        POSTGRES_HOST: !Ref PostgresHost
-        POSTGRES_PORT: !Ref PostgresPort
-        POSTGRES_DB: !Ref PostgresDb
-        POSTGRES_USER: !Ref PostgresUser
-        POSTGRES_PASSWORD: !Ref PostgresPassword
-
-        # Authentication
-        LOGIN_EMAIL: !Ref LoginEmail
-        LOGIN_PASSWORD: !Ref LoginPassword
-        JWT_SECRET_KEY: !Ref JwtSecretKey
+        # AWS Secrets Manager Secret Identifier
+        SECRET_NAME: !Ref SecretName
 
         # AWS Bedrock (AWS_REGION is automatically injected by AWS Lambda runtime)
         BEDROCK_REGION: !Ref BedrockRegion
@@ -33,45 +24,10 @@ Globals:
         AWS_S3_BUCKET: !Ref S3BucketName
 
 Parameters:
-  LoginEmail:
+  SecretName:
     Type: String
-    Default: infrastructureteam@ssi.safestart.com
-    Description: Company login email address
-
-  LoginPassword:
-    Type: String
-    NoEcho: true
-    Description: Company login password
-
-  JwtSecretKey:
-    Type: String
-    NoEcho: true
-    Description: JWT secret key for access token signing
-
-  PostgresHost:
-    Type: String
-    Default: aws-cost.ccbgym6uizfo.us-east-1.rds.amazonaws.com
-    Description: Existing Amazon RDS PostgreSQL Endpoint Host
-
-  PostgresPort:
-    Type: String
-    Default: "5432"
-    Description: PostgreSQL Port
-
-  PostgresDb:
-    Type: String
-    Default: postgres
-    Description: Database Name
-
-  PostgresUser:
-    Type: String
-    Default: postgres
-    Description: Database Username
-
-  PostgresPassword:
-    Type: String
-    NoEcho: true
-    Description: Database Password
+    Default: cloud-cost-intelligence
+    Description: Name or ARN of AWS Secrets Manager secret containing database and auth credentials
 
   S3BucketName:
     Type: String
@@ -90,7 +46,7 @@ Parameters:
 
 Resources:
   # ── 1. FastAPI Web Backend Lambda Function ──────────────────────────────────
-  # Least Privilege: Only Basic Execution + Bedrock permissions. S3 read is NOT needed.
+  # Least Privilege: Execution + Bedrock permissions + Secrets Manager GetSecretValue.
   FastApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -115,12 +71,16 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
+            - Effect: Allow
+              Action:
                 - bedrock:InvokeModel
                 - bedrock:InvokeModelWithResponseStream
               Resource: "*"
 
   # ── 2. Event-Driven ETL Lambda Function ───────────────────────────────────
-  # Least Privilege: Basic Execution + S3 GetObject & ListBucket for billing CSV imports.
+  # Least Privilege: Execution + S3 permissions + Secrets Manager GetSecretValue.
   EtlSyncFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -132,6 +92,10 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
             - Effect: Allow
               Action:
                 - s3:GetObject

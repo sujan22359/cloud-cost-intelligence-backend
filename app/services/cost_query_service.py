@@ -5,10 +5,10 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.db.cost_models import MonthlyCost, ServiceCost
+from app.db.cost_models import AccountMaster, MonthlyCost, ServiceCost
 from app.db.database import SessionLocal
 from app.schemas.cost_schema import MonthlyCost as MonthlyCostSchema
 from app.schemas.cost_schema import MonthlyCostResponse, ServiceBreakdownResponse, ServiceCost as ServiceCostSchema, DimensionType
@@ -787,16 +787,16 @@ class CostQueryService:
             elif dimension == DimensionType.REGION:
                 col = ServiceCost.region
                 group_by_cols = [ServiceCost.region]
-            elif dimension == DimensionType.ACCOUNT:
-                group_by_cols = [ServiceCost.account_id, ServiceCost.account_name]
-            else:
-                raise ValueError(f"Invalid dimension: {dimension}")
+            effective_acc_name = func.coalesce(AccountMaster.account_name, ServiceCost.account_name)
 
             if dimension == DimensionType.ACCOUNT:
+                group_by_cols = [ServiceCost.account_id, effective_acc_name]
                 query = session_obj.query(
                     ServiceCost.account_id,
-                    ServiceCost.account_name,
+                    effective_acc_name.label("account_name"),
                     func.sum(ServiceCost.cost).label("cost")
+                ).outerjoin(
+                    AccountMaster, ServiceCost.account_id == AccountMaster.account_id
                 )
             else:
                 query = session_obj.query(
@@ -824,15 +824,41 @@ class CostQueryService:
             results = query.all()
 
             if dimension == DimensionType.ACCOUNT:
-                total = sum(float(r[2]) for r in results)
+                account_map: dict[str, dict[str, Any]] = {}
+                # Pre-populate all known accounts from AccountMaster to ensure all Trainees/Employees are in filter options
+                all_master = session_obj.query(AccountMaster).all()
+                for am in all_master:
+                    if am.account_id:
+                        account_map[am.account_id] = {
+                            "account_id": am.account_id,
+                            "account_name": am.account_name or am.account_id,
+                            "cost": 0.0,
+                        }
+
+                for r in results:
+                    acc_id = r[0]
+                    acc_name = r[1] or acc_id
+                    cost_val = float(r[2] or 0.0)
+                    if acc_id not in account_map:
+                        account_map[acc_id] = {
+                            "account_id": acc_id,
+                            "account_name": acc_name,
+                            "cost": 0.0,
+                        }
+                    account_map[acc_id]["cost"] += cost_val
+                    if acc_name and acc_name != acc_id:
+                        account_map[acc_id]["account_name"] = acc_name
+
+                total = sum(v["cost"] for v in account_map.values())
+                sorted_accounts = sorted(account_map.values(), key=lambda x: x["cost"], reverse=True)
                 return [
                     {
-                        "account_id": r[0],
-                        "account_name": r[1] or "Unknown Account",
-                        "cost": round(float(r[2]), 4),
-                        "percentage": round((float(r[2]) / total) * 100, 1) if total else 0.0
+                        "account_id": item["account_id"],
+                        "account_name": item["account_name"],
+                        "cost": round(item["cost"], 4),
+                        "percentage": round((item["cost"] / total) * 100, 1) if total else 0.0
                     }
-                    for r in results
+                    for item in sorted_accounts
                 ]
             else:
                 total = sum(float(r[1]) for r in results)
@@ -1074,6 +1100,13 @@ class CostQueryService:
         if session is None:
             return None
         with session as session_obj:
+            # Sync latest Account.csv mappings from S3 into account_master & service_costs
+            try:
+                from app.etl.account_loader import load_accounts
+                load_accounts(session_obj)
+            except Exception as sync_err:
+                logger.warning(f"On-demand account master sync skipped: {sync_err}")
+
             period = billing_period or self._latest_period(session_obj)
             if not period:
                 return None
@@ -1090,61 +1123,76 @@ class CostQueryService:
             )
             total_month = float(total_cost_query.scalar() or 0.0)
 
+            # Resolve developer_type and account_name directly from AccountMaster as single source of truth
+            effective_dev_type = func.coalesce(
+                AccountMaster.developer_type,
+                ServiceCost.developer_type
+            )
+            effective_acc_name = func.coalesce(AccountMaster.account_name, ServiceCost.account_name)
+
             dev_query = session_obj.query(
                 ServiceCost.account_id,
-                ServiceCost.account_name,
-                ServiceCost.developer_type,
+                effective_acc_name.label("account_name"),
+                effective_dev_type.label("developer_type"),
                 ServiceCost.cost
+            ).outerjoin(
+                AccountMaster, ServiceCost.account_id == AccountMaster.account_id
             ).filter(
                 ServiceCost.billing_period == period,
-                ServiceCost.developer_type.in_(["Employee", "Trainee"])
+                (effective_dev_type.isnot(None)) | (AccountMaster.team == "Developers")
             )
-            dev_query = self._apply_filters(
-                dev_query,
-                product=product,
-                environment=environment,
-                account=account,
-                region=region
-            )
+
+            # Apply region and account filters (product/environment filters don't restrict developer accounts)
+            if region:
+                dev_query = dev_query.filter(ServiceCost.region == region)
+            if account:
+                dev_query = dev_query.filter((ServiceCost.account_name == account) | (ServiceCost.account_id == account))
+
             dev_rows = dev_query.all()
 
-            if not dev_rows:
-                return {
-                    "analysis": "developer_analysis",
-                    "billing_period": period,
-                    "total_developer_cost": 0.0,
-                    "total_month_cost": total_month,
-                    "developer_percentage": 0.0,
-                    "employee_cost": 0.0,
-                    "employee_percentage": 0.0,
-                    "trainee_cost": 0.0,
-                    "trainee_percentage": 0.0,
-                    "breakdown": []
-                }
+            account_costs: dict[str, dict[str, Any]] = {}
+
+            # Pre-populate all accounts from AccountMaster under Developers team to ensure 0-cost accounts are displayed
+            master_dev_accounts = session_obj.query(AccountMaster).filter(
+                (AccountMaster.developer_type.in_(["Employee", "Trainee"])) |
+                (AccountMaster.team == "Developers")
+            ).all()
+
+            for acc in master_dev_accounts:
+                acc_key = acc.account_name or acc.account_id
+                if acc_key:
+                    dev_t = "Trainee" if (acc.developer_type and "trainee" in acc.developer_type.lower()) else "Employee"
+                    account_costs[acc_key] = {"cost": 0.0, "developer_type": dev_t}
 
             employee_cost = 0.0
             trainee_cost = 0.0
             total_dev = 0.0
-            account_costs = {}
 
             for acc_id, acc_name, dev_type, cost in dev_rows:
                 val = float(cost)
                 total_dev += val
-                if dev_type == "Employee":
-                    employee_cost += val
-                elif dev_type == "Trainee":
+                norm_type = (dev_type or "").strip()
+                if "trainee" in norm_type.lower():
                     trainee_cost += val
+                    formatted_type = "Trainee"
+                else:
+                    employee_cost += val
+                    formatted_type = "Employee"
                 
                 acc_key = acc_name or acc_id or "Unknown Account"
-                account_costs[acc_key] = account_costs.get(acc_key, 0.0) + val
+                if acc_key not in account_costs:
+                    account_costs[acc_key] = {"cost": 0.0, "developer_type": formatted_type}
+                account_costs[acc_key]["cost"] += val
+                account_costs[acc_key]["developer_type"] = formatted_type
 
             breakdown = [
                 {
                     "account": k,
-                    "cost": round(v, 4),
-                    "percentage": round((v / total_dev) * 100, 1) if total_dev else 0.0
+                    "cost": round(v["cost"], 4),
+                    "developer_type": v["developer_type"],
+                    "percentage": round((v["cost"] / total_dev) * 100, 1) if total_dev else 0.0
                 }
-                for k, v in sorted(account_costs.items(), key=lambda x: x[1], reverse=True)
+                for k, v in sorted(account_costs.items(), key=lambda x: x[1]["cost"], reverse=True)
             ]
 
             return {

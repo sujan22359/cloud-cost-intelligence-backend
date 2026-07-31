@@ -98,5 +98,27 @@ def load_accounts(session: Session) -> Dict[str, Dict[str, Any]]:
         rows_loaded += 1
 
     session.commit()
+
+    # Synchronize updated account master fields into service_costs
+    try:
+        from sqlalchemy import text
+        session.execute(
+            text("""
+                UPDATE service_costs sc
+                SET 
+                    developer_type = am.developer_type,
+                    account_name = am.account_name,
+                    product = am.product,
+                    team = am.team,
+                    environment = am.environment
+                FROM account_master am
+                WHERE sc.account_id = am.account_id
+            """)
+        )
+        session.commit()
+        logger.info("Synchronized account master metadata to service_costs table.")
+    except Exception as sync_err:
+        logger.warning(f"Metadata sync to service_costs encountered non-fatal error: {sync_err}")
+
     logger.info(f"Account.csv read complete: {rows_loaded} rows loaded, {root_ignored} root accounts ignored.")
     return accounts_map

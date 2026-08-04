@@ -27,7 +27,7 @@ class LoginResponse(BaseModel):
     success: bool = True
     access_token: str
     token_type: str = "Bearer"
-    expires_in: int = 86400
+    expires_in: int = 21600
     email: str
 
 

@@ -81,7 +81,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"),
     )
     jwt_algorithm: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALGORITHM"))
-    jwt_expire_hours: int = Field(default=24, validation_alias=AliasChoices("JWT_EXPIRE_HOURS"))
+    jwt_expire_hours: int = Field(default=6, validation_alias=AliasChoices("JWT_EXPIRE_HOURS"))
 
     default_top_k: int = Field(default=DEFAULT_TOP_K, validation_alias=AliasChoices("DEFAULT_TOP_K", "TOP_K_RESULTS"))
     default_pagination_size: int = Field(

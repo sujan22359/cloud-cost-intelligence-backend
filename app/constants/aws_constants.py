@@ -5,7 +5,9 @@ S3_ACCOUNT_MASTER_PREFIX_DEFAULT = "account_master/"
 S3_ACCOUNT_MASTER_FILE_DEFAULT = "account_master/Account.csv"
 S3_COST_EXPLORER_PREFIX_DEFAULT = "cost-explorer/"
 
-AWS_REGION_DEFAULT = "us-east-1"
+import os
+
+AWS_REGION_DEFAULT = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 
 BEDROCK_MODEL_ID_DEFAULT = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 BEDROCK_MAX_TOKENS_DEFAULT = 2048

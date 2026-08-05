@@ -872,6 +872,88 @@ class CostQueryService:
                     for r in results
                 ]
 
+    def get_region_accounts_breakdown(self, billing_period: str | None = None) -> list[dict[str, Any]]:
+        """Return spending breakdown grouped by region AND account_name."""
+        session = self._get_session()
+        if session is None:
+            return []
+        with session as session_obj:
+            period = billing_period or self._latest_period(session_obj)
+            if not period:
+                return []
+
+            effective_acc_name = func.coalesce(AccountMaster.account_name, ServiceCost.account_name)
+            query = (
+                session_obj.query(
+                    ServiceCost.region,
+                    effective_acc_name.label("account_name"),
+                    func.sum(ServiceCost.cost).label("cost")
+                )
+                .outerjoin(AccountMaster, ServiceCost.account_id == AccountMaster.account_id)
+                .filter(ServiceCost.billing_period == period)
+                .group_by(ServiceCost.region, effective_acc_name)
+                .order_by(ServiceCost.region, func.sum(ServiceCost.cost).desc())
+            )
+
+            results = query.all()
+            region_map: dict[str, list[dict[str, Any]]] = {}
+            for row in results:
+                reg = row[0] or "NoRegion"
+                acc_name = row[1] or "Unknown Account"
+                cost_val = round(self._to_float(row[2]) or 0.0, 2)
+                if cost_val > 0:
+                    if reg not in region_map:
+                        region_map[reg] = []
+                    region_map[reg].append({"account_name": acc_name, "cost": cost_val})
+
+            return [
+                {"region": reg, "accounts": accs}
+                for reg, accs in region_map.items()
+            ]
+
+    def get_region_services_breakdown(self, billing_period: str | None = None) -> list[dict[str, Any]]:
+        """Return spending breakdown grouped by region AND service_name."""
+        from app.services.business_cost_service import resolve_service_name_alias  # noqa: PLC0415
+        session = self._get_session()
+        if session is None:
+            return []
+        with session as session_obj:
+            period = billing_period or self._latest_period(session_obj)
+            if not period:
+                return []
+
+            query = (
+                session_obj.query(
+                    ServiceCost.region,
+                    ServiceCost.raw_service_name,
+                    func.sum(ServiceCost.cost).label("cost")
+                )
+                .filter(ServiceCost.billing_period == period)
+                .group_by(ServiceCost.region, ServiceCost.raw_service_name)
+                .order_by(ServiceCost.region, func.sum(ServiceCost.cost).desc())
+            )
+
+            results = query.all()
+            region_map: dict[str, list[dict[str, Any]]] = {}
+            for row in results:
+                reg = row[0] or "NoRegion"
+                svc_raw = row[1] or "Other Services"
+                svc_name = resolve_service_name_alias(svc_raw) or svc_raw
+                cost_val = round(self._to_float(row[2]) or 0.0, 2)
+                if cost_val > 0:
+                    if reg not in region_map:
+                        region_map[reg] = []
+                    existing = next((s for s in region_map[reg] if s["service_name"] == svc_name), None)
+                    if existing:
+                        existing["cost"] = round(existing["cost"] + cost_val, 2)
+                    else:
+                        region_map[reg].append({"service_name": svc_name, "cost": cost_val})
+
+            return [
+                {"region": reg, "services": sorted(svcs, key=lambda x: x["cost"], reverse=True)}
+                for reg, svcs in region_map.items()
+            ]
+
     def get_dimension_trend(
         self,
         dimension: DimensionType,

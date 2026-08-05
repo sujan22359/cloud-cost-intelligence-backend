@@ -718,6 +718,16 @@ class QuestionRouter:
         if dimension == "region":
             logger.info("Routing: region_analysis")
             from app.schemas.cost_schema import DimensionType  # noqa: PLC0415
+            region_breakdown = self._business_cost.get_dimension_breakdown(
+                dimension=DimensionType.REGION,
+                billing_period=billing_period,
+            )
+            region_accounts = self._business_cost.get_region_accounts_breakdown(
+                billing_period=billing_period,
+            )
+            region_services = self._business_cost.get_region_services_breakdown(
+                billing_period=billing_period,
+            )
             if comp_val and dimension_val:
                 ctx = self._business_cost.get_dimension_comparison(
                     dimension=DimensionType.REGION,
@@ -729,20 +739,18 @@ class QuestionRouter:
                 ctx = {
                     "analysis": "region_breakdown",
                     "billing_period": billing_period,
-                    "breakdown": self._business_cost.get_dimension_breakdown(
-                        dimension=DimensionType.REGION,
-                        billing_period=billing_period,
-                    ),
+                    "breakdown": region_breakdown,
+                    "region_accounts": region_accounts,
+                    "region_services": region_services,
                     "region": dimension_val,
                 }
             else:
                 ctx = {
                     "analysis": "region_breakdown",
                     "billing_period": billing_period,
-                    "breakdown": self._business_cost.get_dimension_breakdown(
-                        dimension=DimensionType.REGION,
-                        billing_period=billing_period,
-                    ),
+                    "breakdown": region_breakdown,
+                    "region_accounts": region_accounts,
+                    "region_services": region_services,
                 }
             if ctx:
                 ctx["analysis_type_hint"] = "REGION_ANALYSIS"

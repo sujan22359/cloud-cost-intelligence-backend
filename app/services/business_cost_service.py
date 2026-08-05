@@ -660,6 +660,12 @@ class BusinessCostService:
             region=region
         )
 
+    def get_region_accounts_breakdown(self, billing_period: str | None = None) -> list[dict[str, Any]]:
+        return self._query.get_region_accounts_breakdown(billing_period=billing_period)
+
+    def get_region_services_breakdown(self, billing_period: str | None = None) -> list[dict[str, Any]]:
+        return self._query.get_region_services_breakdown(billing_period=billing_period)
+
     def get_dimension_trend(
         self,
         dimension: DimensionType,

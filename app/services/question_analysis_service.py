@@ -537,6 +537,9 @@ class QuestionAnalysisService:
                         dimension = "account"
                         dimension_value = name.title()
                         break
+                if not dimension and ("account" in text or "accounts" in text):
+                    dimension = "account"
+                    analysis_type = "ACCOUNT_ANALYSIS"
 
         if dimension:
             confidence = max(confidence, 0.90)

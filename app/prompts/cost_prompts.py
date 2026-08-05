@@ -261,10 +261,12 @@ Context:
 
 Question: {question}
 
+Important: Display ONLY the human-readable Account Name (e.g. 'Gayanthika Shankar', 'SafeStart QA', 'AccuTrain Production'). NEVER display numeric Account IDs.
+
 Respond using ONLY these plain section labels:
 
 Ranked Accounts Spend
-[Rank]. [AWS Account ID / Account Name]: **$X,XXX.XX** (X.X% of total spend)
+[Rank]. [Account Name]: **$X,XXX.XX** (X.X% of total spend)
 [Continue for each account requested/top accounts]
 
 Period: [Month YYYY]
@@ -277,10 +279,16 @@ Context:
 
 Question: {question}
 
+Important:
+- If the question asks for services by region or regional service cost breakdown, list the specific top services driving cost in each region from region_services in context (e.g. 'Canada (Central) - $183.49: Amazon RDS ($120.00), Amazon S3 ($63.49)').
+- If the question asks for account details or account names by region, list the specific associated Account Names from region_accounts in context (e.g. 'Associated Accounts: SafeStart QA ($183.49)').
+- Do NOT state that service-level or account-level breakdown by region is unavailable. Always use the data provided in region_services and region_accounts.
+
 Respond using ONLY these plain section labels:
 
 Ranked Regions Spend
-[Rank]. [AWS Region Name (Friendly Name)]: **$X,XXX.XX** (X.X% of total spend)
+[Rank]. [AWS Region Name (Friendly Name)] - **$X,XXX.XX** (X.X% of total spend)
+[List Associated Accounts OR Associated Services from context for this region]
 [Continue for each region requested/top regions]
 
 Period: [Month YYYY]

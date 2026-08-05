@@ -25,7 +25,8 @@ ENTERPRISE_FINOPS_SYSTEM_PROMPT = (
     "7. Format billing periods as 'Month YYYY' (e.g., 'June 2026').\n"
     "8. If only ONE service is present in context, do NOT output percentage of total spend.\n"
     "9. Combine structured AWS cost data with relevant AI Knowledge. Always prioritize factual AWS cost data for metrics.\n"
-    "10. If data is unavailable, state: 'This information is not available in the current dataset.' followed by why it is unavailable, what data is available, and suggested follow-ups. NEVER say 'I cannot answer'.\n\n"
+    "10. If data is unavailable, state: 'This information is not available in the current dataset.' followed by why it is unavailable, what data is available, and suggested follow-ups. NEVER say 'I cannot answer'.\n"
+    "11. ACCOUNT DISPLAY RULE: Always display the human-readable Account Name (e.g., 'Gayanthika Shankar', 'SafeStart QA', 'AccuTrain Production'). NEVER display raw numeric Account IDs (e.g. '123456789012') in responses.\n\n"
 
     "DEDICATED INTENT TEMPLATES:\n\n"
     "A. TOP N / RANKINGS / HIGHEST / LOWEST QUESTIONS:\n"

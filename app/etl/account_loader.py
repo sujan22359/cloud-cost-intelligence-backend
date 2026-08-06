@@ -28,12 +28,64 @@ def load_accounts(session: Session) -> Dict[str, Dict[str, Any]]:
     s3_bucket = settings.aws_s3_bucket
     s3_key = get_account_master_key()
 
+    csv_content = None
+
+    # 1. Try exact primary key
     try:
         response = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)
         csv_content = response["Body"].read().decode("utf-8")
     except Exception as e:
-        logger.error(f"Failed to fetch Account.csv from S3 using key '{s3_key}': {e}")
-        raise
+        logger.warning(f"Primary key '{s3_key}' not found in S3 ({e}). Searching alternative account master keys...")
+
+    # 2. Try alternative common keys
+    if csv_content is None:
+        candidate_keys = [
+            "account_master/account.csv",
+            "account_master/Account_Master.csv",
+            "account_master/Account_master.csv",
+            "account_master/Account.CSV",
+            "Account.csv",
+            "account.csv",
+        ]
+        for key in candidate_keys:
+            try:
+                response = s3_client.get_object(Bucket=s3_bucket, Key=key)
+                csv_content = response["Body"].read().decode("utf-8")
+                logger.info(f"Successfully loaded account master from fallback key '{key}'")
+                break
+            except Exception:
+                continue
+
+    # 3. If still not found, list objects under prefix account_master/
+    if csv_content is None:
+        try:
+            list_res = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix="account_master/")
+            for obj in list_res.get("Contents", []):
+                obj_key = obj.get("Key", "")
+                if obj_key.lower().endswith(".csv"):
+                    response = s3_client.get_object(Bucket=s3_bucket, Key=obj_key)
+                    csv_content = response["Body"].read().decode("utf-8")
+                    logger.info(f"Found account master file via S3 listing: '{obj_key}'")
+                    break
+        except Exception as err:
+            logger.warning(f"Failed to list account_master/ prefix in S3: {err}")
+
+    # 4. Graceful Fallback if Account.csv is completely absent
+    if csv_content is None:
+        logger.warning("Account.csv not found in S3 bucket '%s'. Fallback: loading existing accounts from database.", s3_bucket)
+        existing_db_accounts = session.query(AccountMaster).all()
+        accounts_map = {}
+        for am in existing_db_accounts:
+            if am.account_id:
+                accounts_map[am.account_id] = {
+                    "account_id": am.account_id,
+                    "account_name": am.account_name,
+                    "product": am.product,
+                    "team": am.team,
+                    "environment": am.environment,
+                    "developer_type": am.developer_type
+                }
+        return accounts_map
 
     reader = csv.DictReader(io.StringIO(csv_content))
     accounts_map = {}
